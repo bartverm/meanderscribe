@@ -1,5 +1,5 @@
 # meanderscribe
-Matlab scripts to study the multiscale structer of meandering curves
+Matlab scripts to study the multiscale structure of meandering planforms 
 
 These functions implement the methods explained in the following manuscript:
 
