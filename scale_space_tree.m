@@ -95,15 +95,20 @@ end
 %% Find singular points (where new zero-crossing lines emerge), which mark the edges in scale-direction of the 2d segments
 nzeros=sum(abs(zcr),2);                                                    % Total number of zero_crossing lines emerging at each row
 sing_pnts_rw=find([1; diff(nzeros)>0]);                                    % Find row (period) where singular points occur (where number of zero crossing changes). Note that first row/period is considered as singular one, such that it marks the start of a segment
+% sing_pnts_rw(sing_pnts_rw==size(zcr,1))=[];                                % Exclude singular points on smallest period
 
 % compute total number of nodes for variale initialization
 nnew_zc_lines_lateral=sum(abs([0 0;diff(zcr(:,[1 end]),1,1)])/2,2);        % Number of new zero_crossing lines emerging from lateral singular points at each row
 nnew_zc_lines=[0; diff(nzeros)];                                           % Total number of zero crossing lines emerging at each row
 nnew_zc_lines_internal=nnew_zc_lines-nnew_zc_lines_lateral;                % Number of new zero_crossing lines emerging from internal singular points
-nnew_internal_nodes=nnew_zc_lines_internal+nnew_zc_lines_internal/2;       % Number of nodes emerging at internal singular points (3 for each pair of zc lines
+nnew_internal_nodes=nnew_zc_lines_internal+nnew_zc_lines_internal/2;       % Number of nodes emerging at internal singular points (3 for each pair of zc lines,...
+                                                                           % This is not always correct. When two singular points emerge next to each other, the number of nodes created is less.. but never more, so ok for init.
+                                                                           % We correct for this later in the function
 nnew_lateral_nodes=nnew_zc_lines_lateral;                                  % Number of nodes emerging at lateral singular points (1 for each zc line)
 n_nodes_initial=nzeros(1)-1;                                               % Number of nodes at largest scale
-n_nodes=n_nodes_initial+sum(nnew_internal_nodes+nnew_lateral_nodes);       % Total number of nodes in the tree
+n_nodes_per_period=nnew_internal_nodes+nnew_lateral_nodes;
+n_nodes_per_period(1)=n_nodes_initial;
+init_n_nodes=sum(n_nodes_per_period);       % Total number of nodes in the tree
 n_zclines=nzeros(1)+sum(nnew_zc_lines);                                    % Total number of zero crossings in the tree
 
 %% Make zero-crossing lines from zero-crossing locations
@@ -113,14 +118,15 @@ loc_x=nan(size(wave));                                                     % Mat
 
 % Initialize variable
 [xtr_colmin, xtr_colmax, xtr_rwmin, xtr_rwmax, xtr_conn]=...
-    deal(nan(n_nodes,1));                                                  
-xtr_poly=cell(n_nodes,1);
+    deal(nan(init_n_nodes,1));                                                  
+xtr_poly=cell(init_n_nodes,1);
 zc_lines=cell(n_zclines,1);
 zc_sign=nan(n_zclines,1);
 
 % Initialize counters
 cc=0; % counts the segments in the tree
 last_zc=0; % counts the zero crossing lines
+nodes_in_per=zeros(size(zcr,1),1);
 
 for cs=1:numel(sing_pnts_rw)                                               % loop over all singular periods (i.e. periods where number of zero crossing changes)
     %
@@ -153,6 +159,8 @@ for cs=1:numel(sing_pnts_rw)                                               % loo
     % 2d-portion of the plane
     for cn=1:numel(zercr_col)-1                                            % For all zero crossing at current period except the last one (i.e. all left boundaries of segments)
         if any(znew_col==cn | znew_col==cn+1)                              % if current or next node is new
+            nodes_in_per(sing_pnts_rw(cs))=...
+                nodes_in_per(sing_pnts_rw(cs))+1;                          % Compute actual number of nodes
             cc=cc+1;                                                       % we found a new node, thus increment node counter
             xtr_rwmin(cc)=sing_pnts_rw(cs);                                % period where node starts
             xtr_colmin(cc)=loc_x(sub2ind(size(loc_x),sing_pnts_rw(cs),...
@@ -162,7 +170,7 @@ for cs=1:numel(sing_pnts_rw)                                               % loo
             xtr_idx=round((xtr_colmin(cc)+xtr_colmax(cc))/2);              % The column for the node is taken equal to the center between minimum and maximum column 
             xtr_conn(cc)=ml_idx(xtr_idx);                                  % Find parent node
             ml_idx(xtr_colmin(cc):xtr_colmax(cc))=cc;                      % Claim the s-portion for this node
-            if xtr_conn(cc)~=0                                             % If parent is not root, make the node boundaries for the parent (now we now where parent ends!)
+            if xtr_conn(cc)~=0                                             % If parent is not root, make the node boundaries for the parent (now we know where parent ends!)
                 xtr_rwmax(xtr_conn(cc))=sing_pnts_rw(cs);                  %period (row) where node/segment ends
                 %% Make a polygon bounding the node/segment (we do this for the parent segment since we do not know where current node will end!)
                 [lline_rw, lline_col]=find((...                            
@@ -184,10 +192,23 @@ for cs=1:numel(sing_pnts_rw)                                               % loo
                 xtr_poly{xtr_conn(cc)}=...
                     [size(zcr,1)+1-[lline_rw;flipud(rline_rw);lline_rw(1)],...
                     [lline_col;flipud(rline_col);lline_col(1)]];           % construct the bounding polygon of segment parent to the current one
-            end % if xtr_conn(cc)~=0 
+            end % if xtr_conn(cc)~=0
         end % if any(znew_col==cn | znew_col==cn+1)
-    end % for cn=1:numel(zercr_col)-1  
+    end % for cn=1:numel(zercr_col)-1
 end % loop over all singular periods (i.e. periods where number of zero crossing changes)
+
+%% Correct number of nodes
+% Since we assumed that at each inner singular point 3 nodes emerge, and
+% this is not always true, we now correct for the mismatch in number of
+% nodes.
+n_nodes=sum(nodes_in_per);                                                 % Total number of nodes
+xtr_colmax(n_nodes+1:init_n_nodes)=[];                                     % Resize xtr variables to proper size
+xtr_colmin(n_nodes+1:init_n_nodes)=[];
+xtr_conn(n_nodes+1:init_n_nodes)=[];
+xtr_poly(n_nodes+1:init_n_nodes)=[];
+xtr_rwmax(n_nodes+1:init_n_nodes)=[];
+xtr_rwmin(n_nodes+1:init_n_nodes)=[];
+
 
 %% Make lower bounds and polygon for leaves (smallest scale segments)
 xtr_rwmax(isnan(xtr_rwmax))=size(zcr,1);                                   % add lower boundary for leave nodes found at earlier singular point
