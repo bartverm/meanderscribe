@@ -1,4 +1,4 @@
-function [skval,fatval]=meander_shape(wave, period, peak_row, peak_col, meander_id, bounds, scale, ds)
+function [skval,fatval, varargout]=meander_shape(wave, period, peak_row, peak_col, meander_id, bounds, scale, ds)
 % Computes the meander shape parameters fattening and skewing
 %
 %   [SK, FAT] = meander_shape( WAVE, PERIOD, PEAK_ROW, PEAK_COL, MEANDER_ID
@@ -13,6 +13,11 @@ function [skval,fatval]=meander_shape(wave, period, peak_row, peak_col, meander_
 %       the wavelet spectrum for each period (from Torrence and Compo), DS 
 %       is the sampling distance of the meandering planform.
 %
+%   [SK, FAT, IS_USAMPL] = meander_shape(...) returns true, for meanders
+%   for which the centerline sampling frequency is too small to solve the
+%   shape paramters and false otherwise. SK and FAT will be NaN for 
+%   undersampled meanders. 
+
 %   See also: find_peak_in_pol, detect_meanders, meander_bounds
 %
 %   This function implements parts of Section 2.5 in Vermeulen, et al. 2016
@@ -62,6 +67,14 @@ assert(isnumeric(bounds) && size(bounds,1)==numel(meander_id) &&...
 assert(isnumeric(scale) && numel(scale)==size(wave,1),'Wrong SCALE')       % Check validity of SCALE
 assert(isnumeric(ds) && isscalar(ds) && ds>0,'Wrong DS')                   % Check validity of DS
 
+% check if shape of meanders can be resolved
+min_meander_period=nanmin(period)*3;                                       % Compute minum meander period needed to resolve meander shape
+undersampled_meanders=period(peak_row(meander_id))<min_meander_period;     % Find undersampled meanders
+if any(undersampled_meanders)
+    warning('meander_shape:undersampled',...
+        ['Resolution of centerline is too low to compute the shape of',...
+         ' some meanders'])                                                % Issue a warning if some meanders are undersampled
+end
 
 % find primary and secondary wave
 [skval, fatval]=deal(nan(numel(meander_id),1));                            % initialize output variables
@@ -92,4 +105,7 @@ for cm=1:numel(meander_id)                                                 % loo
     fatval(cm)=scaling*sum(swave.*fatv)./sum(fatv.^2)*speak_max./mpeak_max;% Compute fattening parameter
 end
 
+if nargout>2
+    varargout{1}=undersampled_meanders;
+end
 

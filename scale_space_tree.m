@@ -95,7 +95,6 @@ end
 %% Find singular points (where new zero-crossing lines emerge), which mark the edges in scale-direction of the 2d segments
 nzeros=sum(abs(zcr),2);                                                    % Total number of zero_crossing lines emerging at each row
 sing_pnts_rw=find([1; diff(nzeros)>0]);                                    % Find row (period) where singular points occur (where number of zero crossing changes). Note that first row/period is considered as singular one, such that it marks the start of a segment
-% sing_pnts_rw(sing_pnts_rw==size(zcr,1))=[];                                % Exclude singular points on smallest period
 
 % compute total number of nodes for variale initialization
 nnew_zc_lines_lateral=sum(abs([0 0;diff(zcr(:,[1 end]),1,1)])/2,2);        % Number of new zero_crossing lines emerging from lateral singular points at each row
